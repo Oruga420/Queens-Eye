@@ -1,14 +1,8 @@
-// GET  /api/calendars            -> { calendars: [...] }
-// PUT  /api/calendars  body: { calendars: [...] } -> stores
-import { kv } from "@vercel/kv";
+// GET /api/calendars            -> { calendars: [...] }
+// PUT /api/calendars  body: { calendars: [...] } -> stores in Neon
+import { kvGet, kvSet, isAuthed } from "../lib/db.js";
 
-const KEY = "qe:calendars";
-
-function isAuthed(req) {
-  const auth = req.headers?.authorization || req.headers?.Authorization || "";
-  const expected = "Bearer " + (process.env.QE_PASSCODE || "let-me-in");
-  return auth === expected;
-}
+const KEY = "calendars";
 
 export default async function handler(req, res) {
   if (!isAuthed(req)) {
@@ -17,8 +11,8 @@ export default async function handler(req, res) {
   }
   try {
     if (req.method === "GET") {
-      const calendars = (await kv.get(KEY)) || null;
-      res.status(200).json({ calendars });
+      const value = await kvGet(KEY);
+      res.status(200).json({ calendars: Array.isArray(value) ? value : null });
       return;
     }
     if (req.method === "PUT") {
@@ -27,7 +21,7 @@ export default async function handler(req, res) {
         try { body = JSON.parse(body); } catch { body = {}; }
       }
       const calendars = Array.isArray(body?.calendars) ? body.calendars : [];
-      await kv.set(KEY, calendars);
+      await kvSet(KEY, calendars);
       res.status(200).json({ ok: true, count: calendars.length });
       return;
     }

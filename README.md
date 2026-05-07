@@ -47,15 +47,19 @@ The whole app is gated by a passcode. The default is `let-me-in`. Wrong password
 
 ## Storage
 
-Events and calendars sync to **Vercel KV** (Redis) so they appear in any browser you log into.
-Local browser keeps a localStorage cache so first paint is instant; on mount the app
-hydrates from KV.
+Events and calendars sync to **Neon Postgres** so they appear in any browser you log into.
+A single table `qe_kv (key TEXT PRIMARY KEY, value JSONB, updated_at TIMESTAMPTZ)` is
+auto-created on first request. The browser keeps a localStorage cache so first paint
+is instant; on mount the app hydrates from Neon.
 
-To enable KV after first deploy:
+To enable Neon after first deploy:
 
-1. Vercel Dashboard -> your project -> Storage -> Create Database -> KV.
-2. Connect it to the project. Vercel auto-injects `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+1. Vercel Dashboard -> your project -> Storage -> Create Database -> **Neon**.
+2. Connect it to the project. Vercel auto-injects `DATABASE_URL` (and a few aliases).
 3. Redeploy.
+
+The driver is `@neondatabase/serverless`, which uses HTTPS and works from any
+serverless function with no connection pool to manage.
 
 ## Deploy
 

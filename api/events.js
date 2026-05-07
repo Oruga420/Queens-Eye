@@ -1,16 +1,8 @@
-// GET  /api/events            -> { events: [...] }
-// PUT  /api/events  body: { events: [...] } -> stores and returns { ok, count }
-//
-// Single hardcoded key. No auth. For one-user deployments only.
-import { kv } from "@vercel/kv";
+// GET /api/events            -> { events: [...] }
+// PUT /api/events  body: { events: [...] } -> stores in Neon and returns { ok, count }
+import { kvGet, kvSet, isAuthed } from "../lib/db.js";
 
-const KEY = "qe:events";
-
-function isAuthed(req) {
-  const auth = req.headers?.authorization || req.headers?.Authorization || "";
-  const expected = "Bearer " + (process.env.QE_PASSCODE || "let-me-in");
-  return auth === expected;
-}
+const KEY = "events";
 
 export default async function handler(req, res) {
   if (!isAuthed(req)) {
@@ -19,7 +11,8 @@ export default async function handler(req, res) {
   }
   try {
     if (req.method === "GET") {
-      const events = (await kv.get(KEY)) || [];
+      const value = await kvGet(KEY);
+      const events = Array.isArray(value) ? value : [];
       res.status(200).json({ events });
       return;
     }
@@ -29,7 +22,7 @@ export default async function handler(req, res) {
         try { body = JSON.parse(body); } catch { body = {}; }
       }
       const events = Array.isArray(body?.events) ? body.events : [];
-      await kv.set(KEY, events);
+      await kvSet(KEY, events);
       res.status(200).json({ ok: true, count: events.length });
       return;
     }

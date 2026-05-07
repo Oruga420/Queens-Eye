@@ -28,9 +28,20 @@
     var isApi = url.indexOf("/api/") === 0;
     var isLogin = url.indexOf("/api/login") === 0;
     if (isApi && !isLogin) {
-      init.headers = Object.assign({}, init.headers || {}, window.qeAuthHeader());
+      var t;
+      try { t = localStorage.getItem(KEY); } catch (e) { t = null; }
+      if (!t) {
+        // No token yet: short-circuit silently. Do NOT redirect, the user
+        // is still on the login overlay typing their password.
+        var body = JSON.stringify({ error: "No auth token" });
+        return Promise.resolve(
+          new Response(body, { status: 401, headers: { "Content-Type": "application/json" } })
+        );
+      }
+      init.headers = Object.assign({}, init.headers || {}, { Authorization: "Bearer " + t });
     }
     return origFetch(input, init).then(function (res) {
+      // Only redirect when WE sent a token and the server rejected it.
       if (res.status === 401 && isApi && !isLogin) {
         fail();
       }

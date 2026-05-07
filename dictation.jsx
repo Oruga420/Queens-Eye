@@ -12,10 +12,31 @@ const Dictation = ({ style: dictStyle, events, onCreateEvent, onUpdateEvent, onD
 
   const recRef = React.useRef(null);
   const finalRef = React.useRef("");
+  const inputRef = React.useRef(null);
 
   // Keep a live ref to events so async tool calls always reference current state.
   const eventsRef = React.useRef(events);
   React.useEffect(() => { eventsRef.current = events; }, [events]);
+
+  // Open the panel from the sidebar "New event" button or Cmd/Ctrl+N.
+  React.useEffect(() => {
+    const onOpen = () => {
+      setOpen(true);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    };
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        onOpen();
+      }
+    };
+    window.addEventListener("qe:new-event", onOpen);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("qe:new-event", onOpen);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
 
   const supportsSpeech = typeof window !== "undefined"
     && (window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -248,6 +269,7 @@ const Dictation = ({ style: dictStyle, events, onCreateEvent, onUpdateEvent, onD
           {recording ? <Icon name="stop" size={14} /> : <Icon name="mic" size={16} />}
         </button>
         <input
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendText()}

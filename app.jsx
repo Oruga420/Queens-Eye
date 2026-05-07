@@ -137,7 +137,12 @@ function App() {
     document.documentElement.style.setProperty("--hour-h", `${t.hourHeight}px`);
   }, [t.theme, t.accent, t.hourHeight]);
 
-  const [view, setView] = useState("day");
+  const [view, setView] = useState(() => {
+    try { return localStorage.getItem("qe.view.v1") || "week"; } catch { return "week"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("qe.view.v1", view); } catch {}
+  }, [view]);
   const [cursor, setCursor] = useState(new Date(window.QE_DATA.TODAY));
   const [calendars, setCalendars] = useState(() => window.qeLoadCalendars(window.QE_DATA.CALENDARS));
   const [events, setEvents] = useState(() => window.qeLoadEvents(window.QE_DATA.EVENTS));

@@ -105,7 +105,7 @@ const WeekView = ({ date, events, calendars, hourHeight, weekStart, onEventClick
 };
 
 const wv = {
-  wrap: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 },
+  wrap: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 },
   dowRow: { display: "flex", borderBottom: "1px solid var(--line)" },
   dowGrid: { flex: 1, display: "grid", gridTemplateColumns: "repeat(7, 1fr)" },
   dowCell: {

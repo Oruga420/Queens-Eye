@@ -201,7 +201,7 @@ function App() {
         weekStart={t.weekStart}
         events={events}
       />
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
         <Toolbar
           cursor={cursor} setCursor={setCursor}
           view={view} setView={setView}

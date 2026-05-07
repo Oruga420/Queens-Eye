@@ -174,7 +174,7 @@ const DayView = ({ date, events, calendars, hourHeight, density, onEventClick, w
 };
 
 const dv = {
-  wrap: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 },
+  wrap: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 },
   dayHeader: {
     display: "flex", justifyContent: "space-between", alignItems: "flex-end",
     padding: "20px 28px 16px",

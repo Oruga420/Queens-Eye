@@ -87,20 +87,35 @@ const Dictation = ({ style: dictStyle, events, onCreateEvent, onUpdateEvent, onD
     if (recRef.current) { try { recRef.current.stop(); } catch (_) {} }
   };
 
-  const fmtWhen = (iso) => {
-    const d = new Date(iso);
-    return `${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  const fmtWhen = (d) => {
+    const date = d instanceof Date ? d : new Date(d);
+    return date.toLocaleString("en-US", { timeZone: "America/Toronto", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  };
+
+  // Build a Date from agent output (date + HH:MM, Toronto-local).
+  const buildDate = (dateStr, timeStr) => {
+    if (!dateStr || !timeStr) return null;
+    const [y, mo, d] = dateStr.split("-").map(Number);
+    const [h, mi] = timeStr.split(":").map(Number);
+    if ([y, mo, d, h, mi].some((v) => Number.isNaN(v))) return null;
+    return window.qeMakeTzDate(y, mo, d, h, mi);
   };
 
   const summarizeMutation = (m) => {
-    if (m.type === "create") return `Added "${m.event.title}" on ${fmtWhen(m.event.start)}.`;
+    if (m.type === "create") {
+      const start = buildDate(m.event.date, m.event.start_local);
+      return `Added "${m.event.title}" on ${start ? fmtWhen(start) : `${m.event.date} ${m.event.start_local}`}.`;
+    }
     if (m.type === "update") {
       const e = (eventsRef.current || []).find((x) => x.id === m.id);
       const title = e?.title || "event";
       const parts = [];
       if (m.patch?.title) parts.push(`title to "${m.patch.title}"`);
-      if (m.patch?.start) parts.push(`start to ${fmtWhen(m.patch.start)}`);
-      if (m.patch?.end) parts.push(`end to ${fmtWhen(m.patch.end)}`);
+      if (m.patch?.date || m.patch?.start_local) {
+        const start = buildDate(m.patch.date || (e && e.start && new Date(e.start).toISOString().slice(0, 10)), m.patch.start_local || "00:00");
+        if (start) parts.push(`start to ${fmtWhen(start)}`);
+      }
+      if (m.patch?.end_local) parts.push(`end to ${m.patch.end_local}`);
       if (m.patch?.where) parts.push(`location to ${m.patch.where}`);
       if (m.patch?.cal) parts.push(`calendar to ${m.patch.cal}`);
       return `Updated "${title}" (${parts.join(", ") || "no fields"}).`;
@@ -114,19 +129,37 @@ const Dictation = ({ style: dictStyle, events, onCreateEvent, onUpdateEvent, onD
 
   const applyMutation = (m) => {
     if (m.type === "create" && onCreateEvent) {
+      const start = buildDate(m.event.date, m.event.start_local);
+      const end = buildDate(m.event.date, m.event.end_local) || (start ? new Date(start.getTime() + 30 * 60000) : null);
+      if (!start || !end) {
+        console.error("invalid create payload", m);
+        return;
+      }
       onCreateEvent({
         title: m.event.title,
         company: m.event.company || "",
-        startISO: m.event.start,
-        endISO: m.event.end,
         cal: m.event.cal,
+        start, end,
         where: m.event.where,
         who: m.event.who,
       });
     } else if (m.type === "update" && onUpdateEvent) {
-      const patch = { ...m.patch };
-      if (patch.start) patch.start = new Date(patch.start);
-      if (patch.end) patch.end = new Date(patch.end);
+      const patch = {};
+      const cur = (eventsRef.current || []).find((x) => x.id === m.id);
+      if (m.patch?.title !== undefined) patch.title = m.patch.title;
+      if (m.patch?.company !== undefined) patch.company = m.patch.company;
+      if (m.patch?.cal !== undefined) patch.cal = m.patch.cal;
+      if (m.patch?.where !== undefined) patch.where = m.patch.where;
+      if (m.patch?.who !== undefined) patch.who = m.patch.who;
+      const dateStr = m.patch?.date || (cur ? new Date(cur.start).toLocaleDateString("en-CA", { timeZone: "America/Toronto" }) : null);
+      if (m.patch?.start_local && dateStr) {
+        const s = buildDate(dateStr, m.patch.start_local);
+        if (s) patch.start = s;
+      }
+      if (m.patch?.end_local && dateStr) {
+        const e = buildDate(dateStr, m.patch.end_local);
+        if (e) patch.end = e;
+      }
       onUpdateEvent(m.id, patch);
     } else if (m.type === "delete" && onDeleteEvent) {
       onDeleteEvent(m.id);
@@ -157,6 +190,7 @@ const Dictation = ({ style: dictStyle, events, onCreateEvent, onUpdateEvent, onD
           nowISO: new Date().toISOString(),
           userTZ: window.QE_TZ,
           nowOffset: window.qeTzOffset(),
+          todayToronto: window.qeTodayToronto(),
         }),
       });
       if (!res.ok) {

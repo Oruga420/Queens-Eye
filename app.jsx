@@ -155,13 +155,12 @@ function App() {
   const closePopover = () => { setSelectedEvent(null); setPopoverAnchor(null); };
 
   const onCreateFromVoice = (draft) => {
-    const start = new Date(draft.startISO || draft.start);
-    const end = draft.endISO || draft.end
-      ? new Date(draft.endISO || draft.end)
-      : new Date(start.getTime() + 30 * 60000);
+    const start = draft.start instanceof Date ? draft.start : new Date(draft.startISO || draft.start);
+    let end = draft.end instanceof Date ? draft.end : (draft.endISO || draft.end ? new Date(draft.endISO || draft.end) : null);
+    if (!end) end = new Date(start.getTime() + 30 * 60000);
     setEvents(es => [...es, {
       id: "voice-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
-      cal: draft.cal || "queen",
+      cal: draft.cal || "house",
       title: draft.title,
       company: draft.company || "",
       start, end,

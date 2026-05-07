@@ -201,31 +201,84 @@
   }
   function newId() { return "asst-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7); }
 
+  // Build a Date that, when displayed in Toronto, shows the given Y-M-D HH:MM.
+  function makeTzDate(year, month, day, hour, minute) {
+    const guess = new Date(Date.UTC(year, month - 1, day, hour, minute));
+    const dtf = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Toronto",
+      timeZoneName: "shortOffset",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    });
+    const tzn = dtf.formatToParts(guess).find((p) => p.type === "timeZoneName")?.value || "GMT-05:00";
+    const m = tzn.match(/GMT([+\-])(\d{1,2})(?::?(\d{2}))?/);
+    if (!m) return guess;
+    const sign = m[1] === "-" ? -1 : 1;
+    const offsetMinutes = sign * (parseInt(m[2], 10) * 60 + parseInt(m[3] || "0", 10));
+    return new Date(Date.UTC(year, month - 1, day, hour, minute) - offsetMinutes * 60 * 1000);
+  }
+
+  function buildDate(dateStr, timeStr) {
+    if (!dateStr || !timeStr) return null;
+    const [y, mo, d] = dateStr.split("-").map(Number);
+    const [h, mi] = timeStr.split(":").map(Number);
+    if ([y, mo, d, h, mi].some((v) => Number.isNaN(v))) return null;
+    return makeTzDate(y, mo, d, h, mi);
+  }
+
+  function todayToronto() {
+    const dtf = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto", year: "numeric", month: "2-digit", day: "2-digit" });
+    const parts = dtf.formatToParts(new Date());
+    const y = parts.find((p) => p.type === "year").value;
+    const m = parts.find((p) => p.type === "month").value;
+    const d = parts.find((p) => p.type === "day").value;
+    return `${y}-${m}-${d}`;
+  }
+
   function applyMutations(mutations) {
     if (!Array.isArray(mutations) || mutations.length === 0) return [];
     const events = loadEvents();
     const summaries = [];
     for (const m of mutations) {
-      if (m.type === "create" && m.event && m.event.title && m.event.start && m.event.end) {
+      if (m.type === "create" && m.event && m.event.title && m.event.date && m.event.start_local) {
+        const start = buildDate(m.event.date, m.event.start_local);
+        const end = buildDate(m.event.date, m.event.end_local) || new Date(start.getTime() + 30 * 60000);
+        if (!start) continue;
         events.push({
           id: newId(),
-          cal: m.event.cal || "personal",
+          cal: m.event.cal || "house",
           title: m.event.title,
-          start: m.event.start,
-          end: m.event.end,
+          company: m.event.company || "",
+          start: start.toISOString(),
+          end: end.toISOString(),
           where: m.event.where,
           who: m.event.who,
         });
-        summaries.push(`Added "${m.event.title}" on ${fmtWhen(m.event.start)}.`);
+        summaries.push(`Added "${m.event.title}" on ${fmtWhen(start)}.`);
       } else if (m.type === "update" && m.id) {
         const idx = events.findIndex((e) => e.id === m.id);
         if (idx >= 0) {
           const before = events[idx];
-          events[idx] = { ...before, ...(m.patch || {}) };
+          const dateStr = m.patch?.date || new Date(before.start).toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+          const next = { ...before };
+          if (m.patch?.title !== undefined) next.title = m.patch.title;
+          if (m.patch?.company !== undefined) next.company = m.patch.company;
+          if (m.patch?.cal !== undefined) next.cal = m.patch.cal;
+          if (m.patch?.where !== undefined) next.where = m.patch.where;
+          if (m.patch?.who !== undefined) next.who = m.patch.who;
+          if (m.patch?.start_local) {
+            const s = buildDate(dateStr, m.patch.start_local);
+            if (s) next.start = s.toISOString();
+          }
+          if (m.patch?.end_local) {
+            const e = buildDate(dateStr, m.patch.end_local);
+            if (e) next.end = e.toISOString();
+          }
+          events[idx] = next;
           const parts = [];
           if (m.patch?.title) parts.push(`title to "${m.patch.title}"`);
-          if (m.patch?.start) parts.push(`start to ${fmtWhen(m.patch.start)}`);
-          if (m.patch?.end) parts.push(`end to ${fmtWhen(m.patch.end)}`);
+          if (m.patch?.start_local || m.patch?.date) parts.push(`start to ${fmtWhen(next.start)}`);
+          if (m.patch?.end_local) parts.push(`end to ${fmtWhen(next.end)}`);
           if (m.patch?.where) parts.push(`location to ${m.patch.where}`);
           if (m.patch?.cal) parts.push(`calendar to ${m.patch.cal}`);
           summaries.push(`Updated "${before.title}" (${parts.join(", ") || "no fields"}).`);
@@ -300,6 +353,7 @@
         nowISO: new Date().toISOString(),
         userTZ: "America/Toronto",
         nowOffset: torontoOffset(),
+        todayToronto: todayToronto(),
       }),
     });
     if (!res.ok) {

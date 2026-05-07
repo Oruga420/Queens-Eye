@@ -12,7 +12,10 @@ const MODEL = "claude-sonnet-4-6";
 const SYSTEM_PROMPT = `You are Queens-eye's calendar agent. You manage a calendar by calling tools. Bias hard toward action: create the event with sensible defaults instead of asking. Reply in ONE short line.
 
 TIMEZONE
-All times are America/Toronto, no exceptions. Always use the Toronto offset from the "nowOffset" context (-04:00 EDT or -05:00 EST). Never output Z (UTC). When the user says "9am" or "8pm", they mean Toronto wall time, regardless of where they are.
+All times are America/Toronto. You output Toronto-LOCAL date and time (no offsets, no Z). The frontend converts to a real timestamp. Output:
+- "date": YYYY-MM-DD in Toronto. For "today" use the todayToronto context value. For "tomorrow" use todayToronto + 1 day.
+- "start_local" and "end_local": 24-hour Toronto wall time as HH:MM. 8pm = 20:00. 9pm = 21:00. 9am = 09:00. 12pm = 12:00. Midnight = 00:00.
+NEVER output an offset, NEVER output Z, NEVER output ISO with T. Just date plus HH:MM strings.
 
 CALENDARS (the only valid "cal" values): "queen", "oru", "house".
 Loose matching (case-insensitive, any language):
@@ -64,38 +67,40 @@ OUTPUT STYLE
 const TOOLS = [
   {
     name: "create_event",
-    description: "Add a new calendar event.",
+    description: "Add a new calendar event. Times are Toronto-local; do not output any timezone offset, the frontend handles that.",
     input_schema: {
       type: "object",
       properties: {
-        title:   { type: "string", description: "Event name." },
-        company: { type: "string", description: "Company or org the event is for. Empty string if not given." },
-        start:   { type: "string", description: "ISO 8601 with timezone offset, e.g. 2026-05-08T15:00:00-06:00" },
-        end:     { type: "string", description: "ISO 8601 with timezone offset. Defaults to start + 30 minutes if not stated." },
-        cal:     { type: "string", enum: ["queen", "oru", "house"] },
-        where:   { type: "string", description: "Optional location or link." },
-        who:     { type: "array", items: { type: "string" }, description: "Optional attendee names." },
+        title:       { type: "string", description: "What the meeting is about. The user's trailing description text usually goes here." },
+        company:     { type: "string", description: "Company or topic. Empty string if not given." },
+        cal:         { type: "string", enum: ["queen", "oru", "house"], description: "queen, oru, or house. home/casa/family map to house." },
+        date:        { type: "string", description: "Toronto-local date as YYYY-MM-DD. For 'today' use the todayToronto value from context." },
+        start_local: { type: "string", description: "Toronto-local 24-hour time as HH:MM. For 8pm use 20:00. For 9am use 09:00." },
+        end_local:   { type: "string", description: "Toronto-local 24-hour time as HH:MM. If only a start time was given, set this to 30 minutes after start_local." },
+        where:       { type: "string", description: "Optional location or link." },
+        who:         { type: "array", items: { type: "string" }, description: "Optional attendee names." },
       },
-      required: ["title", "company", "start", "end", "cal"],
+      required: ["title", "company", "cal", "date", "start_local", "end_local"],
     },
   },
   {
     name: "update_event",
-    description: "Change fields on an existing event. Pick the id from the events list provided. Only call when exactly one event matches the user's reference.",
+    description: "Change fields on an existing event. Pick the id from the events list. Only call when exactly one event matches the user's reference.",
     input_schema: {
       type: "object",
       properties: {
-        id: { type: "string", description: "The exact id of the existing event." },
+        id: { type: "string", description: "Exact id of the existing event." },
         patch: {
           type: "object",
           properties: {
-            title:   { type: "string" },
-            company: { type: "string" },
-            start:   { type: "string", description: "ISO 8601 with timezone." },
-            end:     { type: "string", description: "ISO 8601 with timezone." },
-            cal:     { type: "string", enum: ["queen", "oru", "house"] },
-            where:   { type: "string" },
-            who:     { type: "array", items: { type: "string" } },
+            title:       { type: "string" },
+            company:     { type: "string" },
+            cal:         { type: "string", enum: ["queen", "oru", "house"] },
+            date:        { type: "string", description: "Toronto-local YYYY-MM-DD." },
+            start_local: { type: "string", description: "Toronto-local HH:MM." },
+            end_local:   { type: "string", description: "Toronto-local HH:MM." },
+            where:       { type: "string" },
+            who:         { type: "array", items: { type: "string" } },
           },
         },
       },
@@ -115,18 +120,42 @@ const TOOLS = [
   },
 ];
 
+function torontoParts(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const dtf = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Toronto",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+  const out = {};
+  for (const p of dtf.formatToParts(d)) out[p.type] = p.value;
+  return {
+    date: `${out.year}-${out.month}-${out.day}`,
+    time: `${out.hour === "24" ? "00" : out.hour}:${out.minute}`,
+  };
+}
+
 function compactEvents(events) {
   if (!Array.isArray(events)) return [];
-  return events.slice(0, 200).map((e) => ({
-    id: e.id,
-    title: e.title,
-    company: e.company,
-    start: e.start instanceof Date ? e.start.toISOString() : e.start,
-    end: e.end instanceof Date ? e.end.toISOString() : e.end,
-    cal: e.cal,
-    where: e.where,
-    who: e.who,
-  }));
+  return events.slice(0, 200).map((e) => {
+    const startISO = e.start instanceof Date ? e.start.toISOString() : e.start;
+    const endISO = e.end instanceof Date ? e.end.toISOString() : e.end;
+    const sp = torontoParts(startISO);
+    const ep = torontoParts(endISO);
+    return {
+      id: e.id,
+      title: e.title,
+      company: e.company,
+      cal: e.cal,
+      where: e.where,
+      who: e.who,
+      date: sp?.date,
+      start_local: sp?.time,
+      end_local: ep?.time,
+    };
+  });
 }
 
 export default async function handler(req, res) {
@@ -153,16 +182,18 @@ export default async function handler(req, res) {
   const nowISO = (body?.nowISO || new Date().toISOString()).toString();
   const userTZ = (body?.userTZ || "America/Toronto").toString();
   const nowOffset = (body?.nowOffset || "-04:00").toString();
+  const todayToronto = (body?.todayToronto || nowISO.slice(0, 10)).toString();
+  const nowToronto = (body?.nowToronto || nowISO).toString();
 
   const cleanMessages = messages
     .filter((m) => m && typeof m.content === "string" && (m.role === "user" || m.role === "assistant"))
     .slice(-20)
     .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
 
-  const contextBlock = `nowISO: ${nowISO}
-userTZ: ${userTZ}
-nowOffset: ${nowOffset}
-events (${events.length}):
+  const contextBlock = `userTZ: ${userTZ}
+todayToronto: ${todayToronto}
+nowToronto: ${nowToronto}
+events (${events.length}, with toronto-local date and time):
 ${JSON.stringify(events, null, 0)}`;
 
   // Inject context into the most recent user message so the model has it.

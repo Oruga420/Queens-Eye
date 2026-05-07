@@ -158,14 +158,14 @@
 
   <div class="chat" id="chat">
     <div class="empty" id="empty">
-      <div class="big">Paste today's <span>meetings</span> below.</div>
-      <p>I'll summarize, flag prep, and find focus time.</p>
+      <div class="big">Tell me about your <span>day</span>.</div>
+      <p>Add events, move them, cancel them. Or ask for a summary, prep notes, or focus time.</p>
     </div>
   </div>
 
   <div class="composer">
     <div class="box">
-      <textarea id="paste" placeholder="Paste your meetings or ask anything…"></textarea>
+      <textarea id="paste" placeholder="Add, move, or cancel an event. Or ask anything…"></textarea>
       <div class="box-foot">
         <div class="count" id="count">0 lines</div>
         <button class="chip" id="sample">Sample</button>
@@ -176,41 +176,98 @@
       </div>
     </div>
     <div class="chips">
-      <button class="chip" data-ask="Summarize my day">Summarize my day</button>
-      <button class="chip" data-ask="What should I prep for?">What to prep for?</button>
-      <button class="chip" data-ask="Where can I find focus time?">Find focus time</button>
-      <button class="chip" data-ask="Any conflicts?">Any conflicts?</button>
+      <button class="chip" data-ask="Summarize today">Summarize today</button>
+      <button class="chip" data-ask="What should I prep for today?">What to prep for?</button>
+      <button class="chip" data-ask="Find me a focus block today">Find focus time</button>
+      <button class="chip" data-ask="Any conflicts today?">Any conflicts?</button>
     </div>
   </div>
 </div>
 
 <script>
-  const SAMPLE = `9:00   1:1 with Maya — Huddle 2
-9:30   Standup (Apex squad)
-10:00  Investor sync — Northwind (Zoom) — J. Liang, P. Okafor
-11:15  Deep work — narrative deck
-12:45  Lunch w/ Daniel — Yu Kitchen
-14:00  Product review — Atrium (Eng + Design)
-15:15  Hiring panel — Staff PM (Reza K.)
-15:30  Board prep — Office
-16:30  School pickup
-17:30  Inbox zero`;
+  // Shared with the Calendar page. Same keys.
+  const KEY_EVENTS = "qe.events.v2";
 
-  const $ = s => document.querySelector(s);
+  function loadEvents() {
+    try {
+      const raw = localStorage.getItem(KEY_EVENTS);
+      if (!raw) return [];
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    } catch { return []; }
+  }
+  function saveEvents(events) {
+    try { localStorage.setItem(KEY_EVENTS, JSON.stringify(events)); } catch (e) { console.error(e); }
+  }
+  function newId() { return "asst-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7); }
+
+  function applyMutations(mutations) {
+    if (!Array.isArray(mutations) || mutations.length === 0) return [];
+    const events = loadEvents();
+    const summaries = [];
+    for (const m of mutations) {
+      if (m.type === "create" && m.event && m.event.title && m.event.start && m.event.end) {
+        events.push({
+          id: newId(),
+          cal: m.event.cal || "personal",
+          title: m.event.title,
+          start: m.event.start,
+          end: m.event.end,
+          where: m.event.where,
+          who: m.event.who,
+        });
+        summaries.push(`Added "${m.event.title}" on ${fmtWhen(m.event.start)}.`);
+      } else if (m.type === "update" && m.id) {
+        const idx = events.findIndex((e) => e.id === m.id);
+        if (idx >= 0) {
+          const before = events[idx];
+          events[idx] = { ...before, ...(m.patch || {}) };
+          const parts = [];
+          if (m.patch?.title) parts.push(`title to "${m.patch.title}"`);
+          if (m.patch?.start) parts.push(`start to ${fmtWhen(m.patch.start)}`);
+          if (m.patch?.end) parts.push(`end to ${fmtWhen(m.patch.end)}`);
+          if (m.patch?.where) parts.push(`location to ${m.patch.where}`);
+          if (m.patch?.cal) parts.push(`calendar to ${m.patch.cal}`);
+          summaries.push(`Updated "${before.title}" (${parts.join(", ") || "no fields"}).`);
+        }
+      } else if (m.type === "delete" && m.id) {
+        const idx = events.findIndex((e) => e.id === m.id);
+        if (idx >= 0) {
+          const removed = events.splice(idx, 1)[0];
+          summaries.push(`Deleted "${removed.title}".`);
+        }
+      }
+    }
+    saveEvents(events);
+    return summaries;
+  }
+
+  function fmtWhen(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  }
+
+  const $ = (s) => document.querySelector(s);
   const paste = $("#paste"), send = $("#send"), count = $("#count"), chat = $("#chat"), empty = $("#empty");
-  let hasContext = false;
 
   function update() {
-    const lines = paste.value.split(/\n/).filter(l => l.trim()).length;
-    count.textContent = `${lines} line${lines===1?"":"s"}`;
+    const lines = paste.value.split(/\n/).filter((l) => l.trim()).length;
+    count.textContent = `${lines} line${lines === 1 ? "" : "s"}`;
     send.disabled = !paste.value.trim();
     paste.style.height = "auto";
     paste.style.height = Math.min(220, paste.scrollHeight) + "px";
   }
   paste.addEventListener("input", update);
-  $("#sample").addEventListener("click", () => { paste.value = SAMPLE; update(); paste.focus(); });
+  $("#sample").addEventListener("click", () => {
+    const cnt = loadEvents().length;
+    paste.value = cnt === 0
+      ? "I have a 1:1 with Maya tomorrow at 9, standup at 9:30, lunch with Daniel at 12:45 at Yu Kitchen."
+      : "Summarize my day and flag any conflicts.";
+    update(); paste.focus();
+  });
 
-  function esc(s){return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+  function esc(s) { return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
   function addBub(role, html) {
     const d = document.createElement("div");
@@ -223,24 +280,27 @@
     chat.appendChild(d); chat.scrollTop = chat.scrollHeight; return d;
   }
 
-  // Conversation history sent to /api/assistant on each turn.
   const convo = [];
 
-  async function callAssistant(userText) {
+  async function callAgent(userText) {
     convo.push({ role: "user", content: userText });
-    const res = await fetch("/api/assistant", {
+    const res = await fetch("/api/agent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: convo }),
+      body: JSON.stringify({
+        messages: convo,
+        events: loadEvents(),
+        nowISO: new Date().toISOString(),
+      }),
     });
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`assistant ${res.status}: ${errText.slice(0, 200)}`);
+      throw new Error(`agent ${res.status}: ${errText.slice(0, 200)}`);
     }
     const data = await res.json();
     const reply = (data.reply || "").trim();
     if (reply) convo.push({ role: "assistant", content: reply });
-    return reply;
+    return data;
   }
 
   async function trigger() {
@@ -250,20 +310,24 @@
     paste.value = ""; update();
     const t = addTyping();
     try {
-      const reply = await callAssistant(v);
+      const data = await callAgent(v);
+      const summaries = applyMutations(data.mutations);
       t.remove();
-      addBub("bot", reply || "(empty reply)");
-      hasContext = true;
+      const lines = [];
+      if (data.reply) lines.push(esc(data.reply).replace(/\n/g, "<br>"));
+      if (summaries.length) lines.push(`<div style="margin-top:6px;color:var(--accent);font-size:12px"><b>${summaries.map(esc).join("<br>")}</b></div>`);
+      addBub("bot", lines.join("") || (data.mutations?.length ? "Done." : "(no response)"));
     } catch (err) {
       t.remove();
       addBub("bot", `<span style="color:var(--accent)">Error:</span> ${esc(err.message || String(err))}`);
     }
   }
+
   send.addEventListener("click", trigger);
   paste.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); trigger(); }
   });
-  document.querySelectorAll(".chip[data-ask]").forEach(b => {
+  document.querySelectorAll(".chip[data-ask]").forEach((b) => {
     b.addEventListener("click", () => { paste.value = b.dataset.ask; update(); paste.focus(); });
   });
 

@@ -80,8 +80,10 @@ const WeekView = ({ date, events, calendars, hourHeight, weekStart, onEventClick
                           border: isFocus ? `1px dashed ${cal?.color}` : "1px solid rgba(255,255,255,0.15)",
                           color: isFocus ? cal?.color : "white",
                         }}>
+                          <div style={wv.eventCalChip}>{cal?.name}</div>
+                          {ev.company && <div style={wv.eventCompany}>{ev.company}</div>}
                           <div style={wv.eventTitle}>{ev.title}</div>
-                          {height > 32 && <div style={wv.eventMeta} className="mono">{window.qeFmtTime(ev.start)}</div>}
+                          {height > 48 && <div style={wv.eventMeta} className="mono">{window.qeFmtTime(ev.start)}</div>}
                         </button>
                       );
                     })}
@@ -126,6 +128,8 @@ const wv = {
     borderRadius: 6, padding: "3px 6px",
     textAlign: "left", overflow: "hidden",
   },
+  eventCalChip: { fontSize: 8.5, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: "rgba(255,255,255,0.95)", lineHeight: 1.1 },
+  eventCompany: { fontSize: 9.5, fontWeight: 500, color: "rgba(255,255,255,0.95)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   eventTitle: { fontSize: 11, fontWeight: 600, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   eventMeta: { fontSize: 9.5, opacity: 0.9, marginTop: 1 },
   nowLine: { position: "absolute", left: 0, right: 0, height: 0, display: "flex", alignItems: "center", zIndex: 5 },

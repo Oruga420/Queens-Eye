@@ -145,10 +145,14 @@ const DayView = ({ date, events, calendars, hourHeight, density, onEventClick, w
                   border: isFocus ? `1px dashed ${cal?.color || "var(--ink-3)"}` : "1px solid rgba(255,255,255,0.15)",
                   color: isFocus ? cal?.color : "white",
                 }}>
+                  <div style={dv.eventCalRow}>
+                    <span style={{ ...dv.eventCalChip, background: "rgba(255,255,255,0.22)", color: "white" }}>{cal?.name}</span>
+                    {ev.company && <span style={{ ...dv.eventCompany, color: "rgba(255,255,255,0.95)" }}>{ev.company}</span>}
+                  </div>
                   <div style={dv.eventTitle}>{ev.title}</div>
-                  {height > 36 && (
-                    <div style={{ ...dv.eventMeta, color: isFocus ? "var(--ink-3)" : "rgba(255,255,255,0.85)" }} className="mono">
-                      {fmtTime(ev.start)} – {fmtTime(ev.end)}{ev.where ? ` · ${ev.where}` : ""}
+                  {height > 56 && (
+                    <div style={{ ...dv.eventMeta, color: "rgba(255,255,255,0.85)" }} className="mono">
+                      {fmtTime(ev.start)} to {fmtTime(ev.end)}{ev.where ? ` · ${ev.where}` : ""}
                     </div>
                   )}
                 </button>
@@ -205,7 +209,10 @@ const dv = {
     boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
     transition: "transform 120ms ease",
   },
-  eventTitle: { fontSize: 12, fontWeight: 600, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  eventCalRow: { display: "flex", alignItems: "center", gap: 6, marginBottom: 2 },
+  eventCalChip: { fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", padding: "1px 6px", borderRadius: 999 },
+  eventCompany: { fontSize: 10.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  eventTitle: { fontSize: 13, fontWeight: 600, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   eventMeta: { fontSize: 10.5, marginTop: 2, opacity: 0.95 },
   nowLine: { position: "absolute", left: -8, right: 0, height: 0, display: "flex", alignItems: "center", pointerEvents: "none", zIndex: 5 },
   nowDot: { width: 10, height: 10, borderRadius: "50%", background: "var(--accent)", flexShrink: 0 },

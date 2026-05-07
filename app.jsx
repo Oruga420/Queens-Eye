@@ -159,9 +159,10 @@ function App() {
       ? new Date(draft.endISO || draft.end)
       : new Date(start.getTime() + 30 * 60000);
     setEvents(es => [...es, {
-      id: "voice-" + Date.now(),
-      cal: draft.cal || "personal",
+      id: "voice-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+      cal: draft.cal || "queen",
       title: draft.title,
+      company: draft.company || "",
       start, end,
       where: draft.where,
       who: draft.who,
@@ -198,6 +199,7 @@ function App() {
         view={view} setView={setView}
         calendars={calendars} toggleCal={toggleCal}
         weekStart={t.weekStart}
+        events={events}
       />
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         <Toolbar
@@ -243,7 +245,13 @@ function App() {
         />
       )}
 
-      <Dictation style={t.dictationStyle} onCreateEvent={onCreateFromVoice} />
+      <Dictation
+        style={t.dictationStyle}
+        events={events}
+        onCreateEvent={onCreateFromVoice}
+        onUpdateEvent={updateEvent}
+        onDeleteEvent={deleteEvent}
+      />
 
       <TweaksPanel title="Tweaks">
         <TweakSection label="Appearance">

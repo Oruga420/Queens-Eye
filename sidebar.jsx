@@ -1,5 +1,5 @@
 // Left sidebar: brand, mini-month, calendars list
-const Sidebar = ({ cursor, setCursor, view, setView, calendars, toggleCal, weekStart }) => {
+const Sidebar = ({ cursor, setCursor, view, setView, calendars, toggleCal, weekStart, events = [] }) => {
   const [miniMonth, setMiniMonth] = React.useState(() => {
     const d = new Date(cursor); d.setDate(1); return d;
   });
@@ -104,18 +104,28 @@ const Sidebar = ({ cursor, setCursor, view, setView, calendars, toggleCal, weekS
       <div style={sb.section}>
         <div style={sb.sectionHead}><span>Up next</span></div>
         <div style={sb.upNext}>
-          <div style={sb.upRow}>
-            <div className="mono" style={sb.upTime}>10:00</div>
-            <div style={sb.upTitle}>Investor sync — Northwind</div>
-          </div>
-          <div style={sb.upRow}>
-            <div className="mono" style={sb.upTime}>11:15</div>
-            <div style={sb.upTitle}>Deep work — narrative deck</div>
-          </div>
-          <div style={sb.upRow}>
-            <div className="mono" style={sb.upTime}>12:45</div>
-            <div style={sb.upTitle}>Lunch w/ Daniel</div>
-          </div>
+          {(() => {
+            const now = new Date();
+            const upcoming = events
+              .filter((e) => e.start instanceof Date ? e.start > now : new Date(e.start) > now)
+              .sort((a, b) => new Date(a.start) - new Date(b.start))
+              .slice(0, 3);
+            if (upcoming.length === 0) {
+              return <div style={{ ...sb.upTitle, color: "var(--ink-3)", fontStyle: "italic", fontFamily: "Instrument Serif, serif" }}>Nothing upcoming. Ask the assistant.</div>;
+            }
+            return upcoming.map((e) => {
+              const d = e.start instanceof Date ? e.start : new Date(e.start);
+              const hh = d.getHours();
+              const mm = String(d.getMinutes()).padStart(2, "0");
+              const time = `${((hh + 11) % 12) + 1}:${mm}${hh >= 12 ? "p" : "a"}`;
+              return (
+                <div key={e.id} style={sb.upRow}>
+                  <div className="mono" style={sb.upTime}>{time}</div>
+                  <div style={sb.upTitle}>{e.title}</div>
+                </div>
+              );
+            });
+          })()}
         </div>
       </div>
 

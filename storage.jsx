@@ -1,7 +1,7 @@
 // LocalStorage persistence for Queens-eye.
 // Events store ISO date strings; we revive them to Date on load.
-const QE_STORAGE_KEY_EVENTS = "qe.events.v1";
-const QE_STORAGE_KEY_CALENDARS = "qe.calendars.v1";
+const QE_STORAGE_KEY_EVENTS = "qe.events.v2";
+const QE_STORAGE_KEY_CALENDARS = "qe.calendars.v2";
 
 function reviveEvent(e) {
   return {

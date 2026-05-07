@@ -1,18 +1,21 @@
-// Dictation bot. Real Web Speech API + Claude-powered event parsing via /api/parse-event.
-const Dictation = ({ style: dictStyle, onCreateEvent }) => {
+// Dictation bot. Web Speech API + /api/agent for full create/edit/delete on the calendar.
+const Dictation = ({ style: dictStyle, events, onCreateEvent, onUpdateEvent, onDeleteEvent }) => {
   const [open, setOpen] = React.useState(false);
   const [recording, setRecording] = React.useState(false);
   const [thinking, setThinking] = React.useState(false);
-  const [draft, setDraft] = React.useState(null);
   const [transcript, setTranscript] = React.useState("");
   const [history, setHistory] = React.useState([
-    { role: "bot", text: "Hi Quinn. I can create events on your calendar. Tap the mic and say something like: schedule a 30 minute coffee with Priya tomorrow at 3." },
+    { role: "bot", text: "Hi. Tell me what to add, move, or cancel. For edits, give the day and time and I will find it." },
   ]);
   const [input, setInput] = React.useState("");
   const [error, setError] = React.useState(null);
 
   const recRef = React.useRef(null);
   const finalRef = React.useRef("");
+
+  // Keep a live ref to events so async tool calls always reference current state.
+  const eventsRef = React.useRef(events);
+  React.useEffect(() => { eventsRef.current = events; }, [events]);
 
   const supportsSpeech = typeof window !== "undefined"
     && (window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -47,7 +50,7 @@ const Dictation = ({ style: dictStyle, onCreateEvent }) => {
     rec.onend = () => {
       setRecording(false);
       const text = (finalRef.current || transcript || "").trim();
-      if (text) parseAndDraft(text);
+      if (text) callAgent(text);
     };
 
     recRef.current = rec;
@@ -60,48 +63,104 @@ const Dictation = ({ style: dictStyle, onCreateEvent }) => {
   };
 
   const stopRecording = () => {
-    if (recRef.current) {
-      try { recRef.current.stop(); } catch (_) {}
+    if (recRef.current) { try { recRef.current.stop(); } catch (_) {} }
+  };
+
+  const fmtWhen = (iso) => {
+    const d = new Date(iso);
+    return `${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} ${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  };
+
+  const summarizeMutation = (m) => {
+    if (m.type === "create") return `Added "${m.event.title}" on ${fmtWhen(m.event.start)}.`;
+    if (m.type === "update") {
+      const e = (eventsRef.current || []).find((x) => x.id === m.id);
+      const title = e?.title || "event";
+      const parts = [];
+      if (m.patch?.title) parts.push(`title to "${m.patch.title}"`);
+      if (m.patch?.start) parts.push(`start to ${fmtWhen(m.patch.start)}`);
+      if (m.patch?.end) parts.push(`end to ${fmtWhen(m.patch.end)}`);
+      if (m.patch?.where) parts.push(`location to ${m.patch.where}`);
+      if (m.patch?.cal) parts.push(`calendar to ${m.patch.cal}`);
+      return `Updated "${title}" (${parts.join(", ") || "no fields"}).`;
+    }
+    if (m.type === "delete") {
+      const e = (eventsRef.current || []).find((x) => x.id === m.id);
+      return `Deleted "${e?.title || m.id}".`;
+    }
+    return null;
+  };
+
+  const applyMutation = (m) => {
+    if (m.type === "create" && onCreateEvent) {
+      onCreateEvent({
+        title: m.event.title,
+        company: m.event.company || "",
+        startISO: m.event.start,
+        endISO: m.event.end,
+        cal: m.event.cal,
+        where: m.event.where,
+        who: m.event.who,
+      });
+    } else if (m.type === "update" && onUpdateEvent) {
+      const patch = { ...m.patch };
+      if (patch.start) patch.start = new Date(patch.start);
+      if (patch.end) patch.end = new Date(patch.end);
+      onUpdateEvent(m.id, patch);
+    } else if (m.type === "delete" && onDeleteEvent) {
+      onDeleteEvent(m.id);
     }
   };
 
-  const parseAndDraft = async (text) => {
+  const callAgent = async (text) => {
     setHistory((h) => [...h, { role: "user", text }]);
     setThinking(true);
     setError(null);
     try {
-      const res = await fetch("/api/parse-event", {
+      const convo = history
+        .filter((m) => m.role === "bot" || m.role === "user")
+        .concat([{ role: "user", text }])
+        .slice(-12)
+        .map((m) => ({ role: m.role === "bot" ? "assistant" : "user", content: m.text }));
+
+      const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, nowISO: new Date().toISOString() }),
+        body: JSON.stringify({
+          messages: convo,
+          events: (eventsRef.current || []).map((e) => ({
+            id: e.id, title: e.title, cal: e.cal, where: e.where, who: e.who,
+            start: e.start instanceof Date ? e.start.toISOString() : e.start,
+            end: e.end instanceof Date ? e.end.toISOString() : e.end,
+          })),
+          nowISO: new Date().toISOString(),
+        }),
       });
       if (!res.ok) {
         const errText = await res.text();
-        throw new Error(`parse-event ${res.status}: ${errText}`);
+        throw new Error(`agent ${res.status}: ${errText.slice(0, 200)}`);
       }
       const data = await res.json();
-      if (!data.title || !data.startISO) throw new Error("Could not extract event details from that.");
 
-      const startD = new Date(data.startISO);
-      const endD = new Date(data.endISO || startD.getTime() + 30 * 60000);
+      // Apply mutations in order.
+      const mutations = Array.isArray(data.mutations) ? data.mutations : [];
+      mutations.forEach(applyMutation);
 
-      setDraft({
-        title: data.title,
-        startISO: data.startISO,
-        endISO: data.endISO || endD.toISOString(),
-        cal: data.cal || "personal",
-        where: data.where,
-        who: data.who,
-        day: startD.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" }),
-        time: `${startD.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} to ${endD.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`,
-        color: "oklch(0.62 0.14 35)",
-      });
+      const lines = [];
+      if (data.reply) lines.push(data.reply);
+      const summaries = mutations.map(summarizeMutation).filter(Boolean);
+      if (summaries.length) lines.push(summaries.join(" "));
+
+      const botText = lines.join("\n").trim() || (mutations.length ? "Done." : "(no response)");
+      setHistory((h) => [...h, { role: "bot", text: botText }]);
     } catch (err) {
       console.error(err);
       setError(err.message || "Something went wrong.");
-      setHistory((h) => [...h, { role: "bot", text: `I couldn't parse that. ${err.message || ""}`.trim() }]);
+      setHistory((h) => [...h, { role: "bot", text: `Error: ${err.message || "unknown"}` }]);
     } finally {
       setThinking(false);
+      setTranscript("");
+      finalRef.current = "";
     }
   };
 
@@ -109,16 +168,7 @@ const Dictation = ({ style: dictStyle, onCreateEvent }) => {
     const v = input.trim();
     if (!v) return;
     setInput("");
-    parseAndDraft(v);
-  };
-
-  const confirmDraft = () => {
-    if (!draft) return;
-    onCreateEvent && onCreateEvent(draft);
-    setHistory((h) => [...h, { role: "bot", text: `Added "${draft.title}". ${draft.day}, ${draft.time}.` }]);
-    setDraft(null);
-    setTranscript("");
-    finalRef.current = "";
+    callAgent(v);
   };
 
   if (!open) {
@@ -161,7 +211,7 @@ const Dictation = ({ style: dictStyle, onCreateEvent }) => {
           <div style={dc.headOrb}><span style={dc.orbInnerSm} /></div>
           <div>
             <div style={dc.headTitle}>Queens-eye <span className="serif" style={{ color: "var(--ink-3)" }}>· assistant</span></div>
-            <div style={dc.headSub}>Voice or text. Try: schedule coffee with Priya tomorrow at 3.</div>
+            <div style={dc.headSub}>Voice or text. Add, move, or cancel events.</div>
           </div>
         </div>
         <button style={dc.iconBtn} onClick={() => setOpen(false)} aria-label="Close">
@@ -179,23 +229,6 @@ const Dictation = ({ style: dictStyle, onCreateEvent }) => {
           </div>
         )}
         {error && <div style={dc.errorBox}>{error}</div>}
-        {draft && (
-          <div style={dc.draftCard}>
-            <div style={dc.draftHead}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: draft.color }} />
-              <span style={dc.draftCal}>{draft.cal}</span>
-            </div>
-            <div style={dc.draftTitle}>{draft.title}</div>
-            <div style={dc.draftMeta}>{draft.day} · {draft.time}</div>
-            {draft.where && <div style={dc.draftMeta}>{draft.where}</div>}
-            <div style={dc.draftActions}>
-              <button style={dc.draftCancel} onClick={() => setDraft(null)}>Cancel</button>
-              <button style={dc.draftConfirm} onClick={confirmDraft}>
-                <Icon name="check" size={12} /> Add to calendar
-              </button>
-            </div>
-          </div>
-        )}
       </div>
 
       {recording && (
@@ -218,7 +251,7 @@ const Dictation = ({ style: dictStyle, onCreateEvent }) => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && sendText()}
-          placeholder="Or type an event…"
+          placeholder="Add, move, or cancel an event…"
           style={dc.input}
         />
         <button style={dc.sendBtn} onClick={sendText} aria-label="Send">
@@ -284,18 +317,10 @@ const dc = {
   headSub: { fontSize: 11, color: "var(--ink-3)" },
   iconBtn: { width: 26, height: 26, borderRadius: 6, color: "var(--ink-3)", display: "flex", alignItems: "center", justifyContent: "center" },
   body: { flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 },
-  bubBot: { alignSelf: "flex-start", maxWidth: "85%", background: "var(--line-2)", color: "var(--ink-2)", borderRadius: "12px 12px 12px 4px", padding: "9px 12px", fontSize: 12.5, lineHeight: 1.45 },
+  bubBot: { alignSelf: "flex-start", maxWidth: "85%", background: "var(--line-2)", color: "var(--ink-2)", borderRadius: "12px 12px 12px 4px", padding: "9px 12px", fontSize: 12.5, lineHeight: 1.45, whiteSpace: "pre-wrap" },
   bubUser: { alignSelf: "flex-end", maxWidth: "85%", background: "var(--ink)", color: "var(--bg)", borderRadius: "12px 12px 4px 12px", padding: "9px 12px", fontSize: 12.5, lineHeight: 1.45 },
   errorBox: { background: "rgba(184,51,42,0.1)", color: "var(--accent)", border: "1px solid var(--accent)", borderRadius: 8, padding: "8px 10px", fontSize: 12 },
   dot: { display: "inline-block", width: 5, height: 5, borderRadius: "50%", background: "var(--ink-3)", margin: "0 2px", animation: "qe-dot 1.2s infinite" },
-  draftCard: { background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 4 },
-  draftHead: { display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--ink-3)" },
-  draftCal: { textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600 },
-  draftTitle: { fontSize: 14, fontWeight: 600 },
-  draftMeta: { fontSize: 12, color: "var(--ink-2)" },
-  draftActions: { display: "flex", gap: 8, marginTop: 8 },
-  draftCancel: { flex: 1, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--line)", color: "var(--ink-2)", fontSize: 12, fontWeight: 500 },
-  draftConfirm: { flex: 2, padding: "8px 10px", borderRadius: 8, background: "var(--ink)", color: "var(--bg)", fontSize: 12, fontWeight: 500, display: "flex", alignItems: "center", justifyContent: "center", gap: 5 },
   transcriptBar: { display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", borderTop: "1px solid var(--line)", background: "var(--line-2)" },
   recDot: { width: 8, height: 8, borderRadius: "50%", background: "var(--warn)", boxShadow: "0 0 0 0 var(--warn)", animation: "qe-pulse 1.2s infinite" },
   transcriptText: { fontSize: 12.5, color: "var(--ink)", fontStyle: "italic" },

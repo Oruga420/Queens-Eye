@@ -51,10 +51,13 @@ const MonthView = ({ date, events, calendars, weekStart, onEventClick, setCursor
                 {shown.map(ev => {
                   const cal = calMap[ev.cal];
                   return (
-                    <button key={ev.id} onClick={(e) => onEventClick(ev, e.currentTarget)} style={mv.evRow}>
+                    <button key={ev.id} onClick={(e) => onEventClick(ev, e.currentTarget)} style={mv.evRow} title={`${cal?.name || ""}${ev.company ? " · " + ev.company : ""} · ${ev.title}`}>
                       <span style={{ ...mv.evDot, background: cal?.color }} />
                       <span className="mono" style={mv.evTime}>{window.qeFmtTime(ev.start)}</span>
-                      <span style={mv.evTitle}>{ev.title}</span>
+                      <span style={mv.evTitle}>
+                        {ev.company ? <b style={{ color: "var(--ink)" }}>{ev.company} </b> : null}
+                        {ev.title}
+                      </span>
                     </button>
                   );
                 })}

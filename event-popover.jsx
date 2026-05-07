@@ -5,6 +5,7 @@ const EventPopover = ({ event, anchor, calendars, onClose, onUpdate, onDelete })
   const [mode, setMode] = React.useState("view"); // "view" | "edit" | "reschedule"
 
   const [title, setTitle] = React.useState(event.title);
+  const [company, setCompany] = React.useState(event.company || "");
   const [where, setWhere] = React.useState(event.where || "");
   const [who, setWho] = React.useState((event.who || []).join(", "));
   const [calId, setCalId] = React.useState(event.cal);
@@ -18,6 +19,7 @@ const EventPopover = ({ event, anchor, calendars, onClose, onUpdate, onDelete })
 
   React.useEffect(() => {
     setTitle(event.title);
+    setCompany(event.company || "");
     setWhere(event.where || "");
     setWho((event.who || []).join(", "));
     setCalId(event.cal);
@@ -52,6 +54,7 @@ const EventPopover = ({ event, anchor, calendars, onClose, onUpdate, onDelete })
   const saveEdit = () => {
     onUpdate(event.id, {
       title: title.trim() || event.title,
+      company: company.trim(),
       where: where.trim() || undefined,
       who: who.split(",").map((s) => s.trim()).filter(Boolean),
       cal: calId,
@@ -91,6 +94,7 @@ const EventPopover = ({ event, anchor, calendars, onClose, onUpdate, onDelete })
 
         {mode === "view" && (
           <>
+            {event.company && <div style={ep.company}>{event.company}</div>}
             <div style={ep.title}>{event.title}</div>
             <div style={ep.when}>
               <div style={ep.whenDay}>{fmtDate(event.start)}</div>
@@ -114,6 +118,9 @@ const EventPopover = ({ event, anchor, calendars, onClose, onUpdate, onDelete })
           <>
             <label style={ep.label}>Title
               <input style={ep.input} value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+            </label>
+            <label style={ep.label}>Company
+              <input style={ep.input} value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company or org" />
             </label>
             <label style={ep.label}>Where
               <input style={ep.input} value={where} onChange={(e) => setWhere(e.target.value)} placeholder="Location or link" />
@@ -165,6 +172,7 @@ const ep = {
   calStripe: { width: 4, height: 14, borderRadius: 2 },
   calName: { fontSize: 11, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600 },
   iconBtn: { width: 24, height: 24, borderRadius: 6, color: "var(--ink-3)", display: "flex", alignItems: "center", justifyContent: "center" },
+  company: { fontSize: 11.5, fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: 0.6 },
   title: { fontSize: 17, fontWeight: 600, lineHeight: 1.3 },
   when: { display: "flex", flexDirection: "column", gap: 2 },
   whenDay: { fontSize: 13, color: "var(--ink)" },

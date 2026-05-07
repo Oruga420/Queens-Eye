@@ -4,7 +4,7 @@ const WEEK_HOURS = Array.from({ length: 24 }, (_, i) => i);
 function startOfWeek(d, weekStart) {
   const out = new Date(d);
   out.setHours(0, 0, 0, 0);
-  const day = out.getDay();
+  const day = window.qeTzWeekday ? window.qeTzWeekday(out) : out.getDay();
   const offset = (day - (weekStart === "mon" ? 1 : 0) + 7) % 7;
   out.setDate(out.getDate() - offset);
   return out;
@@ -22,12 +22,11 @@ const WeekView = ({ date, events, calendars, hourHeight, weekStart, onEventClick
     const t = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(t);
   }, []);
-  const today = window.QE_DATA.TODAY;
 
   const scrollRef = React.useRef(null);
   React.useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = Math.max(0, 7 * hourHeight - 20); }, [start.toDateString()]);
 
-  const isSameDay = (a, b) => a.toDateString() === b.toDateString();
+  const isSameDay = (a, b) => window.qeTzSameDay(a, b);
 
   return (
     <div style={wv.wrap}>
@@ -35,11 +34,12 @@ const WeekView = ({ date, events, calendars, hourHeight, weekStart, onEventClick
         <div style={{ width: 60 }} />
         <div style={wv.dowGrid}>
           {days.map((d, i) => {
-            const isToday = isSameDay(d, today);
+            const isToday = isSameDay(d, now);
+            const dp = window.qeTzParts(d);
             return (
               <div key={i} style={{ ...wv.dowCell, ...(isToday ? wv.dowCellToday : {}) }}>
-                <div style={wv.dowName}>{d.toLocaleDateString("en-US", { weekday: "short" })}</div>
-                <div style={{ ...wv.dowNum, ...(isToday ? wv.dowNumToday : {}) }}>{d.getDate()}</div>
+                <div style={wv.dowName}>{window.qeTzFmtDate(d, { weekday: "short" })}</div>
+                <div style={{ ...wv.dowNum, ...(isToday ? wv.dowNumToday : {}) }}>{dp.day}</div>
               </div>
             );
           })}
@@ -62,28 +62,25 @@ const WeekView = ({ date, events, calendars, hourHeight, weekStart, onEventClick
             <div style={wv.colsWrap}>
               {days.map((d, i) => {
                 const dayEvents = events.filter(e => isSameDay(e.start, d) && calMap[e.cal]?.checked);
-                const isToday = isSameDay(d, today);
-                const nowTop = (now.getHours() + now.getMinutes()/60) * hourHeight;
+                const isToday = isSameDay(d, now);
+                const nowTop = (window.qeTzMinutes(now) / 60) * hourHeight;
                 return (
                   <div key={i} style={wv.col}>
                     {dayEvents.map(ev => {
-                      const startMins = ev.start.getHours() * 60 + ev.start.getMinutes();
-                      const endMins = ev.end.getHours() * 60 + ev.end.getMinutes();
+                      const startMins = window.qeTzMinutes(ev.start);
+                      const endMins = window.qeTzMinutes(ev.end);
                       const top = (startMins / 60) * hourHeight;
-                      const height = Math.max(18, ((endMins - startMins) / 60) * hourHeight - 2);
+                      const height = Math.max(20, ((endMins - startMins) / 60) * hourHeight - 2);
                       const cal = calMap[ev.cal];
-                      const isFocus = ev.kind === "focus";
+                      const label = [cal?.name, ev.company, ev.title].filter(Boolean).join(", ");
                       return (
                         <button key={ev.id} onClick={(e) => onEventClick(ev, e.currentTarget)} style={{
                           ...wv.event, top, height,
-                          background: isFocus ? "transparent" : cal?.color,
-                          border: isFocus ? `1px dashed ${cal?.color}` : "1px solid rgba(255,255,255,0.15)",
-                          color: isFocus ? cal?.color : "white",
-                        }}>
-                          <div style={wv.eventCalChip}>{cal?.name}</div>
-                          {ev.company && <div style={wv.eventCompany}>{ev.company}</div>}
-                          <div style={wv.eventTitle}>{ev.title}</div>
-                          {height > 48 && <div style={wv.eventMeta} className="mono">{window.qeFmtTime(ev.start)}</div>}
+                          background: cal?.color,
+                          border: "1px solid rgba(255,255,255,0.15)",
+                          color: "white",
+                        }} title={label}>
+                          <div style={wv.eventLine}>{label}</div>
                         </button>
                       );
                     })}
@@ -128,10 +125,7 @@ const wv = {
     borderRadius: 6, padding: "3px 6px",
     textAlign: "left", overflow: "hidden",
   },
-  eventCalChip: { fontSize: 8.5, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", color: "rgba(255,255,255,0.95)", lineHeight: 1.1 },
-  eventCompany: { fontSize: 9.5, fontWeight: 500, color: "rgba(255,255,255,0.95)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  eventTitle: { fontSize: 11, fontWeight: 600, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  eventMeta: { fontSize: 9.5, opacity: 0.9, marginTop: 1 },
+  eventLine: { fontSize: 10.5, fontWeight: 600, lineHeight: 1.25, color: "white", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   nowLine: { position: "absolute", left: 0, right: 0, height: 0, display: "flex", alignItems: "center", zIndex: 5 },
   nowDot: { width: 7, height: 7, borderRadius: "50%", background: "var(--warn)" },
   nowBar: { flex: 1, height: 1.5, background: "var(--warn)" },

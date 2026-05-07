@@ -52,12 +52,7 @@ function fmtTime(d) {
 
 const DayView = ({ date, events, calendars, hourHeight, density, onEventClick, weather }) => {
   const calMap = Object.fromEntries(calendars.map(c => [c.id, c]));
-  const todays = events.filter(e =>
-    e.start.getFullYear() === date.getFullYear()
-    && e.start.getMonth() === date.getMonth()
-    && e.start.getDate() === date.getDate()
-    && calMap[e.cal]?.checked
-  );
+  const todays = events.filter(e => window.qeTzSameDay(e.start, date) && calMap[e.cal]?.checked);
   const packed = pack(todays);
 
   const [now, setNow] = React.useState(new Date());
@@ -66,21 +61,20 @@ const DayView = ({ date, events, calendars, hourHeight, density, onEventClick, w
     return () => clearInterval(t);
   }, []);
 
-  const today = window.QE_DATA.TODAY;
-  const isToday = date.toDateString() === today.toDateString();
-  const nowMins = now.getHours() * 60 + now.getMinutes();
-  const nowTop = (nowMins / 60) * hourHeight;
+  const isToday = window.qeTzSameDay(date, now);
+  const nowTop = (window.qeTzMinutes(now) / 60) * hourHeight;
 
   const scrollRef = React.useRef(null);
+  const dateKey = window.qeTzFmtDate(date, { year: "numeric", month: "2-digit", day: "2-digit" });
   React.useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = Math.max(0, (7 * hourHeight) - 20);
     }
-  }, [date.toDateString()]);
+  }, [dateKey]);
 
-  const dayLabel = date.toLocaleDateString("en-US", { weekday: "long" });
-  const dayNum = date.getDate();
-  const dayMonth = date.toLocaleDateString("en-US", { month: "short" });
+  const dayLabel = window.qeTzFmtDate(date, { weekday: "long" });
+  const dayNum = window.qeTzParts(date).day;
+  const dayMonth = window.qeTzFmtDate(date, { month: "short" });
 
   return (
     <div style={dv.wrap}>
@@ -127,45 +121,39 @@ const DayView = ({ date, events, calendars, hourHeight, density, onEventClick, w
             ))}
 
             {packed.map(ev => {
-              const startMins = ev.start.getHours() * 60 + ev.start.getMinutes();
-              const endMins = ev.end.getHours() * 60 + ev.end.getMinutes();
+              const startMins = window.qeTzMinutes(ev.start);
+              const endMins = window.qeTzMinutes(ev.end);
               const top = (startMins / 60) * hourHeight;
-              const height = Math.max(20, ((endMins - startMins) / 60) * hourHeight - 2);
+              const height = Math.max(22, ((endMins - startMins) / 60) * hourHeight - 2);
               const cal = calMap[ev.cal];
               const widthPct = 100 / ev.totalCols;
               const leftPct = ev.col * widthPct;
-              const isFocus = ev.kind === "focus";
+              const label = [cal?.name, ev.company, ev.title].filter(Boolean).join(", ");
               return (
                 <button key={ev.id} onClick={(e) => onEventClick(ev, e.currentTarget)} style={{
                   ...dv.event,
                   top, height,
                   left: `calc(${leftPct}% + 4px)`,
                   width: `calc(${widthPct}% - 8px)`,
-                  background: isFocus ? "transparent" : (cal?.color || "var(--accent)"),
-                  border: isFocus ? `1px dashed ${cal?.color || "var(--ink-3)"}` : "1px solid rgba(255,255,255,0.15)",
-                  color: isFocus ? cal?.color : "white",
-                }}>
-                  <div style={dv.eventCalRow}>
-                    <span style={{ ...dv.eventCalChip, background: "rgba(255,255,255,0.22)", color: "white" }}>{cal?.name}</span>
-                    {ev.company && <span style={{ ...dv.eventCompany, color: "rgba(255,255,255,0.95)" }}>{ev.company}</span>}
-                  </div>
-                  <div style={dv.eventTitle}>{ev.title}</div>
-                  {height > 56 && (
-                    <div style={{ ...dv.eventMeta, color: "rgba(255,255,255,0.85)" }} className="mono">
-                      {fmtTime(ev.start)} to {fmtTime(ev.end)}{ev.where ? ` · ${ev.where}` : ""}
-                    </div>
-                  )}
+                  background: cal?.color || "var(--accent)",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  color: "white",
+                }} title={label}>
+                  <div style={dv.eventLine}>{label}</div>
                 </button>
               );
             })}
 
-            {isToday && (
-              <div style={{ ...dv.nowLine, top: nowTop }}>
-                <div style={dv.nowDot} />
-                <div style={dv.nowBar} />
-                <div className="mono" style={dv.nowLabel}>{`${((now.getHours()+11)%12)+1}:${String(now.getMinutes()).padStart(2,"0")}`}</div>
-              </div>
-            )}
+            {isToday && (() => {
+              const np = window.qeTzParts(now);
+              return (
+                <div style={{ ...dv.nowLine, top: nowTop }}>
+                  <div style={dv.nowDot} />
+                  <div style={dv.nowBar} />
+                  <div className="mono" style={dv.nowLabel}>{`${((np.hour + 11) % 12) + 1}:${String(np.minute).padStart(2, "0")}`}</div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -209,11 +197,7 @@ const dv = {
     boxShadow: "0 1px 0 rgba(0,0,0,0.04)",
     transition: "transform 120ms ease",
   },
-  eventCalRow: { display: "flex", alignItems: "center", gap: 6, marginBottom: 2 },
-  eventCalChip: { fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, textTransform: "uppercase", padding: "1px 6px", borderRadius: 999 },
-  eventCompany: { fontSize: 10.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  eventTitle: { fontSize: 13, fontWeight: 600, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  eventMeta: { fontSize: 10.5, marginTop: 2, opacity: 0.95 },
+  eventLine: { fontSize: 12, fontWeight: 600, lineHeight: 1.25, color: "white", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   nowLine: { position: "absolute", left: -8, right: 0, height: 0, display: "flex", alignItems: "center", pointerEvents: "none", zIndex: 5 },
   nowDot: { width: 10, height: 10, borderRadius: "50%", background: "var(--accent)", flexShrink: 0 },
   nowBar: { flex: 1, height: 1.5, background: "var(--accent)" },

@@ -1,16 +1,18 @@
 // Month view — 6-row grid
 const MonthView = ({ date, events, calendars, weekStart, onEventClick, setCursor, setView }) => {
   const calMap = Object.fromEntries(calendars.map(c => [c.id, c]));
-  const first = new Date(date.getFullYear(), date.getMonth(), 1);
-  const offset = (first.getDay() - (weekStart === "mon" ? 1 : 0) + 7) % 7;
+  const dp = window.qeTzParts(date);
+  const first = new Date(dp.year, dp.month - 1, 1);
+  const firstDow = window.qeTzWeekday(first);
+  const offset = (firstDow - (weekStart === "mon" ? 1 : 0) + 7) % 7;
   const gridStart = new Date(first); gridStart.setDate(gridStart.getDate() - offset);
 
   const cells = Array.from({ length: 42 }, (_, i) => {
     const d = new Date(gridStart); d.setDate(d.getDate() + i); return d;
   });
 
-  const today = window.QE_DATA.TODAY;
-  const isSameDay = (a, b) => a.toDateString() === b.toDateString();
+  const today = new Date();
+  const isSameDay = (a, b) => window.qeTzSameDay(a, b);
 
   const dows = weekStart === "mon"
     ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -23,10 +25,11 @@ const MonthView = ({ date, events, calendars, weekStart, onEventClick, setCursor
       </div>
       <div style={mv.grid}>
         {cells.map((d, i) => {
-          const inMonth = d.getMonth() === date.getMonth();
+          const cellMonth = window.qeTzParts(d).month;
+          const inMonth = cellMonth === dp.month;
           const isToday = isSameDay(d, today);
           const dayEvents = events.filter(e => isSameDay(e.start, d) && calMap[e.cal]?.checked)
-            .sort((a, b) => a.start - b.start);
+            .sort((a, b) => new Date(a.start) - new Date(b.start));
           const shown = dayEvents.slice(0, 3);
           const more = dayEvents.length - shown.length;
           return (
@@ -39,25 +42,23 @@ const MonthView = ({ date, events, calendars, weekStart, onEventClick, setCursor
                     ...(isToday ? mv.dayNumToday : {}),
                     color: inMonth ? "var(--ink)" : "var(--ink-3)",
                   }}>
-                  {d.getDate()}
+                  {window.qeTzParts(d).day}
                 </button>
-                {d.getDate() === 1 && (
+                {window.qeTzParts(d).day === 1 && (
                   <span style={mv.monthMark}>
-                    {d.toLocaleDateString("en-US", { month: "short" })}
+                    {window.qeTzFmtDate(d, { month: "short" })}
                   </span>
                 )}
               </div>
               <div style={mv.events}>
                 {shown.map(ev => {
                   const cal = calMap[ev.cal];
+                  const label = [cal?.name, ev.company, ev.title].filter(Boolean).join(", ");
                   return (
-                    <button key={ev.id} onClick={(e) => onEventClick(ev, e.currentTarget)} style={mv.evRow} title={`${cal?.name || ""}${ev.company ? " · " + ev.company : ""} · ${ev.title}`}>
+                    <button key={ev.id} onClick={(e) => onEventClick(ev, e.currentTarget)} style={mv.evRow} title={label}>
                       <span style={{ ...mv.evDot, background: cal?.color }} />
-                      <span className="mono" style={mv.evTime}>{window.qeFmtTime(ev.start)}</span>
-                      <span style={mv.evTitle}>
-                        {ev.company ? <b style={{ color: "var(--ink)" }}>{ev.company} </b> : null}
-                        {ev.title}
-                      </span>
+                      <span className="mono" style={mv.evTime}>{window.qeTzFmtShort(ev.start)}</span>
+                      <span style={mv.evTitle}>{label}</span>
                     </button>
                   );
                 })}

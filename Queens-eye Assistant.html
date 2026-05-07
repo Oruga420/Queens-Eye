@@ -245,7 +245,14 @@
   function fmtWhen(iso) {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return iso;
-    return d.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    return d.toLocaleString("en-US", { timeZone: "America/Toronto", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  }
+  function torontoOffset() {
+    const dtf = new Intl.DateTimeFormat("en-US", { timeZone: "America/Toronto", timeZoneName: "shortOffset" });
+    const tzn = dtf.formatToParts(new Date()).find((p) => p.type === "timeZoneName")?.value || "GMT-05:00";
+    const m = tzn.match(/GMT([+\-])(\d{1,2})(?::?(\d{2}))?/);
+    if (!m) return "-05:00";
+    return `${m[1]}${String(parseInt(m[2], 10)).padStart(2, "0")}:${m[3] || "00"}`;
   }
 
   const $ = (s) => document.querySelector(s);
@@ -291,6 +298,8 @@
         messages: convo,
         events: loadEvents(),
         nowISO: new Date().toISOString(),
+        userTZ: "America/Toronto",
+        nowOffset: torontoOffset(),
       }),
     });
     if (!res.ok) {

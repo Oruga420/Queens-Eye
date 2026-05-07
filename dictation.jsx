@@ -150,11 +150,13 @@ const Dictation = ({ style: dictStyle, events, onCreateEvent, onUpdateEvent, onD
         body: JSON.stringify({
           messages: convo,
           events: (eventsRef.current || []).map((e) => ({
-            id: e.id, title: e.title, cal: e.cal, where: e.where, who: e.who,
+            id: e.id, title: e.title, company: e.company, cal: e.cal, where: e.where, who: e.who,
             start: e.start instanceof Date ? e.start.toISOString() : e.start,
             end: e.end instanceof Date ? e.end.toISOString() : e.end,
           })),
           nowISO: new Date().toISOString(),
+          userTZ: window.QE_TZ,
+          nowOffset: window.qeTzOffset(),
         }),
       });
       if (!res.ok) {

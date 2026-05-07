@@ -11,6 +11,8 @@ const MODEL = "claude-sonnet-4-6";
 
 const SYSTEM_PROMPT = `You are Queens-eye's calendar agent. You manage the user's calendar by calling tools.
 
+TIMEZONE: All times are anchored to America/Toronto, no exceptions. Whenever you produce ISO 8601 timestamps, USE THE TORONTO OFFSET that the user passes you in the "nowOffset" context (for example "-04:00" in summer, "-05:00" in winter). Never output Z (UTC). Never output a different city's offset. The user means Toronto wall-clock time when they say "9am", regardless of where they are.
+
 Tools available:
 - create_event: add a new event to the calendar
 - update_event: change fields of an existing event (title, company, start, end, cal, where, who)
@@ -18,21 +20,19 @@ Tools available:
 
 Calendars (the only valid values for the "cal" field): queen, oru, house. The user will tell you which one.
 
-Event input format the user will use (in any order, any language): a calendar (Queen, Oru, House), a company, an event name, a time, and a duration. You must extract all five into the create_event tool call. If a duration is not given, default to 30 minutes.
+Event input format the user will use (in any order, any language): a calendar (Queen, Oru, House), a company, an event name, a time, and a duration. Extract all five into create_event. If duration is not given, default to 30 minutes.
 
 Rules:
 1. When the user describes events to add, extract them and call create_event for each. Multiple events in one message means multiple tool calls.
-2. To edit or delete: the user gives the day and time. Match against the provided events list. If exactly ONE event matches, call the tool. If MULTIPLE events match, do NOT call any tool. Reply asking which one (list candidates with their titles, companies, and times).
-3. Resolve relative dates ("today", "tomorrow", "next Monday", "manana", "el viernes", "demain", etc.) relative to nowISO.
+2. To edit or delete: the user gives the day and time. Match against the provided events list using Toronto-local day and time. If exactly ONE event matches, call the tool. If MULTIPLE events match, do NOT call any tool. Reply asking which one (list candidates with calendar, company, title, and time).
+3. Resolve relative dates ("today", "tomorrow", "next Monday", "manana", "el viernes", "demain") relative to nowISO interpreted in Toronto.
 4. Default duration: 30 minutes if not stated.
 5. If the user mentions a calendar name (Queen, Oru, House) anywhere in the request, use that. If they do not mention one, ask which calendar.
-6. Always extract a "company" if mentioned. If absent, set company to an empty string.
+6. Always extract "company" if mentioned. If absent, set company to "".
 7. If the user just asks a question (summary, prep, conflicts, focus time) WITHOUT asking to add/edit/delete, do not call tools. Reply concisely.
-8. Reply in the SAME LANGUAGE the user wrote in. If they switch languages, switch with them.
+8. Reply in the SAME LANGUAGE the user wrote in. Match their language exactly.
 9. Never use em dashes or en dashes. Use periods, commas, "to", or parentheses.
-10. After calling create_event, your reply (if any) should be a short confirmation. Do not repeat the tool input verbatim.
-
-Output ISO 8601 timestamps with timezone offset for start and end.`;
+10. After calling tools, your reply (if any) should be a short confirmation. Do not repeat the tool input verbatim.`;
 
 const TOOLS = [
   {
@@ -124,6 +124,8 @@ export default async function handler(req, res) {
   }
   const events = compactEvents(body?.events);
   const nowISO = (body?.nowISO || new Date().toISOString()).toString();
+  const userTZ = (body?.userTZ || "America/Toronto").toString();
+  const nowOffset = (body?.nowOffset || "-04:00").toString();
 
   const cleanMessages = messages
     .filter((m) => m && typeof m.content === "string" && (m.role === "user" || m.role === "assistant"))
@@ -131,6 +133,8 @@ export default async function handler(req, res) {
     .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
 
   const contextBlock = `nowISO: ${nowISO}
+userTZ: ${userTZ}
+nowOffset: ${nowOffset}
 events (${events.length}):
 ${JSON.stringify(events, null, 0)}`;
 

@@ -18,10 +18,9 @@ const Sidebar = ({ cursor, setCursor, view, setView, calendars, toggleCal, weekS
   for (let i = 1; i <= daysInMonth; i++) cells.push(i);
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const isSameDay = (a, b) =>
-    a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const isSameDay = (a, b) => a && b && window.qeTzSameDay(a, b);
 
-  const today = window.QE_DATA.TODAY;
+  const today = new Date();
 
   const dayLabels = weekStart === "mon"
     ? ["M", "T", "W", "T", "F", "S", "S"]
@@ -107,21 +106,20 @@ const Sidebar = ({ cursor, setCursor, view, setView, calendars, toggleCal, weekS
           {(() => {
             const now = new Date();
             const upcoming = events
-              .filter((e) => e.start instanceof Date ? e.start > now : new Date(e.start) > now)
+              .filter((e) => (e.start instanceof Date ? e.start : new Date(e.start)) > now)
               .sort((a, b) => new Date(a.start) - new Date(b.start))
               .slice(0, 3);
             if (upcoming.length === 0) {
               return <div style={{ ...sb.upTitle, color: "var(--ink-3)", fontStyle: "italic", fontFamily: "Instrument Serif, serif" }}>Nothing upcoming. Ask the assistant.</div>;
             }
             return upcoming.map((e) => {
-              const d = e.start instanceof Date ? e.start : new Date(e.start);
-              const hh = d.getHours();
-              const mm = String(d.getMinutes()).padStart(2, "0");
-              const time = `${((hh + 11) % 12) + 1}:${mm}${hh >= 12 ? "p" : "a"}`;
+              const time = window.qeTzFmtShort(e.start);
+              const calName = (calendars.find((c) => c.id === e.cal) || {}).name;
+              const label = [calName, e.company, e.title].filter(Boolean).join(", ");
               return (
                 <div key={e.id} style={sb.upRow}>
                   <div className="mono" style={sb.upTime}>{time}</div>
-                  <div style={sb.upTitle}>{e.title}</div>
+                  <div style={sb.upTitle}>{label}</div>
                 </div>
               );
             });

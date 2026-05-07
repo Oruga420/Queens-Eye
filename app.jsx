@@ -3,15 +3,16 @@ const { useState, useEffect, useMemo } = React;
 
 const Toolbar = ({ cursor, setCursor, view, setView, onToday, onTweaks, search, setSearch }) => {
   const fmt = useMemo(() => {
-    if (view === "month") return cursor.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    const tz = "America/Toronto";
+    if (view === "month") return cursor.toLocaleDateString("en-US", { timeZone: tz, month: "long", year: "numeric" });
     if (view === "week") {
       const start = window.qeStartOfWeek(cursor, "mon");
       const end = new Date(start); end.setDate(end.getDate() + 6);
-      const sm = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      const em = end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-      return `${sm} – ${em}`;
+      const sm = start.toLocaleDateString("en-US", { timeZone: tz, month: "short", day: "numeric" });
+      const em = end.toLocaleDateString("en-US", { timeZone: tz, month: "short", day: "numeric", year: "numeric" });
+      return `${sm} to ${em}`;
     }
-    return cursor.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+    return cursor.toLocaleDateString("en-US", { timeZone: tz, weekday: "long", month: "long", day: "numeric", year: "numeric" });
   }, [cursor, view]);
 
   const step = (dir) => {

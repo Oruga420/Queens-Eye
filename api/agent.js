@@ -158,7 +158,17 @@ function compactEvents(events) {
   });
 }
 
+function isAuthed(req) {
+  const auth = req.headers?.authorization || req.headers?.Authorization || "";
+  const expected = "Bearer " + (process.env.QE_PASSCODE || "let-me-in");
+  return auth === expected;
+}
+
 export default async function handler(req, res) {
+  if (!isAuthed(req)) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;

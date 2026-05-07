@@ -149,9 +149,24 @@ function App() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [popoverAnchor, setPopoverAnchor] = useState(null);
   const [search, setSearch] = useState("");
+  const hydratedRef = React.useRef(false);
 
-  useEffect(() => { window.qeSaveEvents(events); }, [events]);
-  useEffect(() => { window.qeSaveCalendars(calendars); }, [calendars]);
+  // Hydrate from cloud on mount; suppress save until after hydration to avoid
+  // clobbering server state with the localStorage-only first paint.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const remoteEvents = await window.qeFetchRemoteEvents();
+      if (!cancelled && Array.isArray(remoteEvents)) setEvents(remoteEvents);
+      const remoteCals = await window.qeFetchRemoteCalendars();
+      if (!cancelled && Array.isArray(remoteCals) && remoteCals.length) setCalendars(remoteCals);
+      hydratedRef.current = true;
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => { if (hydratedRef.current) window.qeSaveEvents(events); }, [events]);
+  useEffect(() => { if (hydratedRef.current) window.qeSaveCalendars(calendars); }, [calendars]);
 
   const toggleCal = (id) => setCalendars(cs => cs.map(c => c.id === id ? { ...c, checked: !c.checked } : c));
 

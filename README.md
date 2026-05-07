@@ -32,18 +32,37 @@ The agent extracts all fields and adds the event. For edits, give the day and ti
 cd "Queens-Eye"
 npm install
 cp .env.example .env.local
-# edit .env.local: ANTHROPIC_API_KEY=sk-ant-...
+# edit .env.local:
+#   ANTHROPIC_API_KEY=sk-ant-...
+#   QE_PASSCODE=let-me-in       (or any string you want)
 npm run dev
 # http://localhost:5173
 ```
 
 `npm run dev` runs `vercel dev`, serving static files and the `/api/*` functions with env vars from `.env.local`.
 
+## Auth
+
+The whole app is gated by a passcode. The default is `let-me-in`. Wrong password redirects to `https://www.eloruga.com`. Change it via the `QE_PASSCODE` env var.
+
+## Storage
+
+Events and calendars sync to **Vercel KV** (Redis) so they appear in any browser you log into.
+Local browser keeps a localStorage cache so first paint is instant; on mount the app
+hydrates from KV.
+
+To enable KV after first deploy:
+
+1. Vercel Dashboard -> your project -> Storage -> Create Database -> KV.
+2. Connect it to the project. Vercel auto-injects `KV_REST_API_URL` and `KV_REST_API_TOKEN`.
+3. Redeploy.
+
 ## Deploy
 
 ```bash
 npx vercel
 npx vercel env add ANTHROPIC_API_KEY production
+npx vercel env add QE_PASSCODE production
 npx vercel --prod
 ```
 

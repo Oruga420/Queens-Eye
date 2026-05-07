@@ -135,6 +135,7 @@
 </style>
 </head>
 <body>
+<script src="auth.js"></script>
 <div class="shell">
   <header>
     <div class="brand">
@@ -185,7 +186,7 @@
 </div>
 
 <script>
-  // Shared with the Calendar page. Same keys.
+  // Shared with the Calendar page. Same keys, same /api/events store.
   const KEY_EVENTS = "qe.events.v2";
 
   function loadEvents() {
@@ -198,7 +199,18 @@
   }
   function saveEvents(events) {
     try { localStorage.setItem(KEY_EVENTS, JSON.stringify(events)); } catch (e) { console.error(e); }
+    fetch("/api/events", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ events }),
+    }).catch((e) => console.error("PUT events:", e));
   }
+  // Pull latest from cloud on first load.
+  fetch("/api/events").then((r) => r.ok ? r.json() : null).then((data) => {
+    if (data && Array.isArray(data.events)) {
+      try { localStorage.setItem(KEY_EVENTS, JSON.stringify(data.events)); } catch {}
+    }
+  }).catch(() => {});
   function newId() { return "asst-" + Date.now() + "-" + Math.random().toString(36).slice(2, 7); }
 
   // Build a Date that, when displayed in Toronto, shows the given Y-M-D HH:MM.

@@ -10,7 +10,8 @@
     "static": "npx --yes serve@latest -l 5173 ."
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1"
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@vercel/kv": "^3.0.0"
   },
   "devDependencies": {
     "vercel": "^39.1.3"
